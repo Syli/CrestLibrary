@@ -1,0 +1,5 @@
+{
+    "require":{
+        "fuzzysteve/crestlibrary":"dev-master"
+    }
+}

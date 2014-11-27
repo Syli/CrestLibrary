@@ -1,6 +1,7 @@
 <?php
 namespace CrestLibrary;
 
+
 class Client
 {
     
@@ -25,19 +26,19 @@ class Client
         $this->expiry=0;
         $this->access_token=$access_token;
         $this->urlbase=$urlbase;
-        $this->endpoints=$this->getEndpoints();
         $this->clientid=$clientid;
         $this->secret=$secret;
         $this->refresh_token=$refresh_token;
         $this->expiry=$expiry;
-        $this->guzzle_client=new GuzzleHTTP\Client([
+        $this->guzzle_client=new \GuzzleHttp\Client([
             'base_url' => $urlbase,
-            defaults => [
+            'defaults' => [
                 'headers' => [
                     'User-Agent' => $this->useragent
                 ]
             ]
         ]);
+        $this->endpoints=$this->getEndpoints();
     }
     
 
@@ -57,43 +58,35 @@ class Client
 
     private function getAccessToken()
     {
-        $response = $this->guzzle_client->post(
-            $this->endpoints->authEndpoint->href,
-            [
-                'query' => ['grant_type' => 'refresh_token','refresh_token' => $this->refresh_token],
-                'headers' => [ 'Authorization' => 'Basic '.base64_encode($this->clientid.':'.$this->secret)]
-            ]
-        );
-        $json=$response->json();
+
+        $config['headers']=array( 'Authorization' => 'Basic '.base64_encode($this->clientid.':'.$this->secret));
+        $config['query']=array('grant_type' => 'refresh_token','refresh_token' => $this->refresh_token);
+
+        $response = $this->guzzle_client->post($this->endpoints->authEndpoint->href, $config);
+        $json=json_decode($response->getBody());
         $this->access_token=$json->access_token;
         $this->expiry=time()+$json->expires_in-20;
-        echo $this->access_token;
-
     }
 
     private function getEndpoints()
     {
         $response = $this->guzzle_client->get('/');
-        $json=$response->json();
-        return $json;
+        return json_decode($response->getBody());
     }
 
     private function getRegions()
     {
-
         if (count($this->regions)) {
             return;
         }
+
         if ($this->expiry<time()) {
             $this->getAccessToken();
         }
 
-        $response = $this->guzzle_client->get(
-            $this->endpoints->regions->href,
-            [['headers'] => ['Authorization' => 'Bearer '.$this->access_token]]
-        );
-        $json=$response->json();
-        var_dump($json->items);
+        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $response = $this->guzzle_client->get($this->endpoints->regions->href, $config);
+        $json=json_decode($response->getBody());
         foreach ($json->items as $regiondata) {
             $this->regions[$regiondata->name]=$regiondata->href;
         }
@@ -105,23 +98,21 @@ class Client
         if (count($this->items)) {
             return;
         }
-        if ($this->expiry<time()) {
+        if ($this->expiry<time()+30) {
             $this->getAccessToken();
         }
         $url=$this->endpoints->itemTypes->href;
+        
+        echo "###\n".$this->access_token."\n###\n";
+        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
         while (1) {
-            $response = $this->guzzle_client->get(
-                $this->endpoints->itemTypes->href,
-                [
-                    ['headers'] => ['Authorization' => 'Bearer '.$this->access_token],
-                ]
-            );
-            $json=$response->json();
+            $response = $this->guzzle_client->get($url, $config);
+            $json=json_decode($response->getBody());
             foreach ($json->items as $item) {
                 $this->items[$item->name]=$item->href;
             }
             if (isset($json->next)) {
-                $url=$json->next;
+                $url=$json->next->href;
             } else {
                 break;
             }
@@ -138,12 +129,9 @@ class Client
         if ($this->expiry<time()) {
             $this->getAccessToken();
         }
-        
-        $response = $this->guzzle_client->get(
-            $this->regions[$region],
-            [['headers'] => ['Authorization' => 'Bearer '.$this->access_token]]
-        );
-        $json=$response->json();
+        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $response = $this->guzzle_client->get($this->regions[$region], $config);
+        $json=json_decode($response->getBody());
         return array($json->marketSellOrders->href,$json->marketBuyOrders->href);
 
     }
@@ -167,21 +155,15 @@ class Client
 
     }
 
-    private function processPrice($type, $region)
+    private function processPrice($type, $url)
     {
         if ($this->expiry<time()) {
             $this->getAccessToken();
         }
-        
-        $response = $this->guzzle_client->get(
-            $this->regions[$region],
-            [
-                ['headers'] => ['Authorization' => 'Bearer '.$this->access_token],
-                ['query'] => ['type' => $this->items[$type] ]
-            ]
-        );
-        $json=$response->json();
-
+        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $config['query']=array('type' =>  $this->items[$type]);
+        $response = $this->guzzle_client->get($url, $config);
+        $json=json_decode($response->getBody());
         $details=array();
         foreach ($json->items as $item) {
             $details[]=array(
