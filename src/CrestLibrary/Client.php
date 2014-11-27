@@ -1,7 +1,7 @@
 <?php
-namespace FuzzyCrest;
+namespace CrestLibrary;
 
-class CrestHandler
+class Client
 {
     
     private $useragent="Fuzzwork Crest agent 1.0";
