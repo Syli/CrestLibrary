@@ -70,7 +70,8 @@ class Client
 
     private function getEndpoints()
     {
-        $response = $this->guzzle_client->get('/');
+        $config['headers']=array('Content-Type'=>'application/vnd.ccp.eve.Api-v3+json');
+        $response = $this->guzzle_client->get('/', $config);
         return json_decode($response->getBody());
     }
 
@@ -84,7 +85,10 @@ class Client
             $this->getAccessToken();
         }
 
-        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $config['headers']=array(
+            'Authorization' => 'Bearer '.$this->access_token,
+            'Content-Type' => 'application/vnd.ccp.eve.RegionCollection-v1+json'
+            );
         $response = $this->guzzle_client->get($this->endpoints->regions->href, $config);
         $json=json_decode($response->getBody());
         foreach ($json->items as $regiondata) {
@@ -103,8 +107,10 @@ class Client
         }
         $url=$this->endpoints->itemTypes->href;
         
-        echo "###\n".$this->access_token."\n###\n";
-        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $config['headers']=array(
+            'Authorization' => 'Bearer '.$this->access_token,
+            'Content-Type' => 'application/vnd.ccp.eve.ItemTypeCollection-v1+json'
+        );
         while (1) {
             $response = $this->guzzle_client->get($url, $config);
             $json=json_decode($response->getBody());
@@ -129,7 +135,10 @@ class Client
         if ($this->expiry<time()) {
             $this->getAccessToken();
         }
-        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $config['headers']=array(
+            'Authorization' => 'Bearer '.$this->access_token,
+            'Content-Type' => 'application/vnd.ccp.eve.Region-v1+json'
+        );
         $response = $this->guzzle_client->get($this->regions[$region], $config);
         $json=json_decode($response->getBody());
         return array($json->marketSellOrders->href,$json->marketBuyOrders->href);
@@ -160,7 +169,10 @@ class Client
         if ($this->expiry<time()) {
             $this->getAccessToken();
         }
-        $config['headers']=array('Authorization' => 'Bearer '.$this->access_token);
+        $config['headers']=array(
+            'Authorization' => 'Bearer '.$this->access_token,
+            'Content-Type' => 'application/vnd.ccp.eve.MarketOrderCollection-v1+json'
+        );
         $config['query']=array('type' =>  $this->items[$type]);
         $response = $this->guzzle_client->get($url, $config);
         $json=json_decode($response->getBody());
