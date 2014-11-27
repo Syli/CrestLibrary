@@ -1,0 +1,19 @@
+{
+    "name": "fuzzysteve/CrestLibrary",
+    "description": "Crest Library for Eve Online",
+    "homepage": "https://github.com/fuzzysteve/crestLibrary",
+    "keywords": ["EVE Online","CREST"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Steve Anderson",
+            "email": "steve@fuzzysteve.co.uk",
+            "role": "Developer"
+        }
+    ],
+    "type": "library",
+    "autoload": {
+        "psr-0": { "CrestLibrary": "src/"}
+    },
+    "require": { "guzzlehttp/guzzle":"*"}
+}
