@@ -70,7 +70,7 @@ class Client
 
     private function getEndpoints()
     {
-        $config['headers']=array('Content-Type'=>'application/vnd.ccp.eve.Api-v3+json');
+        $config['headers']=array('Accept'=>'application/vnd.ccp.eve.Api-v3+json; charset=utf-8');
         $response = $this->guzzle_client->get('/', $config);
         return json_decode($response->getBody());
     }
@@ -87,7 +87,7 @@ class Client
 
         $config['headers']=array(
             'Authorization' => 'Bearer '.$this->access_token,
-            'Content-Type' => 'application/vnd.ccp.eve.RegionCollection-v1+json'
+            'Accept' => 'application/vnd.ccp.eve.RegionCollection-v1+json; charset=utf-8'
             );
         $response = $this->guzzle_client->get($this->endpoints->regions->href, $config);
         $json=json_decode($response->getBody());
@@ -109,7 +109,7 @@ class Client
         
         $config['headers']=array(
             'Authorization' => 'Bearer '.$this->access_token,
-            'Content-Type' => 'application/vnd.ccp.eve.ItemTypeCollection-v1+json'
+            'Accept' => 'application/vnd.ccp.eve.ItemTypeCollection-v1+json; charset=utf-8'
         );
         while (1) {
             $response = $this->guzzle_client->get($url, $config);
@@ -137,7 +137,7 @@ class Client
         }
         $config['headers']=array(
             'Authorization' => 'Bearer '.$this->access_token,
-            'Content-Type' => 'application/vnd.ccp.eve.Region-v1+json'
+            'Accept' => 'application/vnd.ccp.eve.Region-v1+json; charset=utf-8'
         );
         $response = $this->guzzle_client->get($this->regions[$region], $config);
         $json=json_decode($response->getBody());
@@ -171,7 +171,7 @@ class Client
         }
         $config['headers']=array(
             'Authorization' => 'Bearer '.$this->access_token,
-            'Content-Type' => 'application/vnd.ccp.eve.MarketOrderCollection-v1+json'
+            'Accept' => 'application/vnd.ccp.eve.MarketOrderCollection-v1+json; charset=utf-8'
         );
         $config['query']=array('type' =>  $this->items[$type]);
         $response = $this->guzzle_client->get($url, $config);
