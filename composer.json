@@ -15,5 +15,8 @@
     "autoload": {
         "psr-0": { "CrestLibrary": "src/"}
     },
-    "require": { "guzzlehttp/guzzle":"*"}
+    "require": { 
+        "guzzlehttp/guzzle":"*",
+        "tedivm/stash": "0.12.*"
+    }
 }
