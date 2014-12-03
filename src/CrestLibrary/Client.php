@@ -7,23 +7,23 @@ class Client
     
     private $useragent="Fuzzwork Crest agent 1.0";
     private $expiry;
-    private $endpoints;
+    private $cache;
     private $secret;
     private $clientid;
     private $refresh_token;
     private $urlbase;
-    private $dbh;
-    private $database_prefix;
     private $guzzle_client;
 
 
 // Temporaty, until I work up the database caching.
-    private $regions=array();
-    private $items=array();
 
-    public function __construct($urlbase, $secret, $clientid, $refresh_token, $access_token = '', $expiry = 0)
+    public function __construct($urlbase, $secret, $clientid, $refresh_token, $access_token = '', $expiry = 0, $pool = '')
     {
         $this->expiry=0;
+        if ($pool==='') {
+            $pool = new \Stash\Pool();
+        }
+        $this->cache=$pool;
         $this->access_token=$access_token;
         $this->urlbase=$urlbase;
         $this->clientid=$clientid;
@@ -38,109 +38,150 @@ class Client
                 ]
             ]
         ]);
-        $this->endpoints=$this->getEndpoints();
     }
-    
+  
 
-    public function setDBHandle($dbh, $database_prefix)
+    public function walkEndpoint($resource, $key, $collection, $index = '', $parameters = array(), $accept = '', $maxpages = INF, $ttl = 300)
     {
-        $this->dbh=$dbh;
-        $this->database_prefix=$database_prefix;
-        
-        $test_sql="select count(*) cnt from ".$this->database_prefix.".cache";
-        $test_stmt=$this->dbh->prepare($test_sql);
 
-        $result=$test_stmt->execute();
-        if ($result->cnt < 0) {
-            throw new \Exception("Bad Database handle. Cache table doesn't exist");
+        $item=$this->cache->getItem('walked/'.$key);
+        $data=$item->get();
+        if ($item->isMiss()) {
+            $data=array();
+            $url=$resource;
+            $pagecount=0;
+            while (1) {
+                $pagecount++;
+                $walker=$this->getEndpoint($url, $parameters, $accept);
+                foreach ($walker->$collection as $collectionItem) {
+                    if ($index=='') {
+                        $data[]=$collectionItem;
+                    } else {
+                        $data[$collectionItem->$index]=$collectionItem;
+                    }
+                }
+                if (isset($walker->next) and $pagecount<$maxpages) {
+                    $url=$walker->next->href;
+                } else {
+                    break;
+                }
+            }
+            $item->set($data, $ttl);
         }
+        return $data;
     }
+
+
+    public function getEndpoint($resource, $parameters = array(), $accept = '')
+    {
+        #var_dump($resource);
+        $key=trim(str_replace($this->urlbase, '', $resource), '/');
+        $item=$this->cache->getItem($key.'/'.sha1(json_encode($parameters).$accept));
+        $data=$item->get();
+        if ($item->isMiss()) {
+            $item->lock();
+            if ($this->expiry<time()+5) {
+                $this->getAccessToken();
+            }
+            $config['headers']=array(
+                'Authorization' => 'Bearer '.$this->access_token,
+                'Accept' => $accept
+            );
+            if (count($parameters)) {
+                $config['query']=$parameters;
+            }
+            $response = $this->guzzle_client->get($resource, $config);
+            $ttl=200;
+            if ($cachecontrol=$response->getHeader('Cache-Control')) {
+                $parts=explode(",", $cachecontrol);
+                foreach ($parts as $line) {
+                    if (substr(trim($line), 0, 7)=='max-age') {
+                        $ttl=substr(trim($line), 8);
+                    }
+                }
+            }
+            $data=json_decode($response->getBody());
+            $item->set($data, $ttl);
+        }
+        return $data;
+    }
+
 
     private function getAccessToken()
     {
-
+        $endpoints=$this->getEndpoints();
         $config['headers']=array( 'Authorization' => 'Basic '.base64_encode($this->clientid.':'.$this->secret));
         $config['query']=array('grant_type' => 'refresh_token','refresh_token' => $this->refresh_token);
 
-        $response = $this->guzzle_client->post($this->endpoints->authEndpoint->href, $config);
+        $response = $this->guzzle_client->post($endpoints->authEndpoint->href, $config);
         $json=json_decode($response->getBody());
         $this->access_token=$json->access_token;
         $this->expiry=time()+$json->expires_in-20;
     }
 
-    private function getEndpoints()
+    public function getEndpoints()
     {
-        $config['headers']=array('Accept'=>'application/vnd.ccp.eve.Api-v3+json; charset=utf-8');
-        $response = $this->guzzle_client->get('/', $config);
-        return json_decode($response->getBody());
+        $item=$this->cache->getitem('Endpoints');
+        $data=$item->get();
+        if ($item->isMiss()) {
+            $item->lock();
+            $config['headers']=array('Accept'=>'application/vnd.ccp.eve.Api-v3+json; charset=utf-8');
+            $response = $this->guzzle_client->get('/', $config);
+            $data=json_decode($response->getBody());
+            $ttl=300;
+            if ($cachecontrol=$response->getHeader('Cache-Control')) {
+                $parts=explode(",", $cachecontrol);
+                foreach ($parts as $line) {
+                    if (substr(trim($line), 0, 7)=='max-age') {
+                        $ttl=substr(trim($line), 8);
+                    }
+                }
+            }
+            $item->set($data, $ttl);
+        }
+        return $data;
     }
 
     private function getRegions()
     {
-        if (count($this->regions)) {
-            return;
-        }
-
-        if ($this->expiry<time()) {
-            $this->getAccessToken();
-        }
-
-        $config['headers']=array(
-            'Authorization' => 'Bearer '.$this->access_token,
-            'Accept' => 'application/vnd.ccp.eve.RegionCollection-v1+json; charset=utf-8'
-            );
-        $response = $this->guzzle_client->get($this->endpoints->regions->href, $config);
-        $json=json_decode($response->getBody());
-        foreach ($json->items as $regiondata) {
-            $this->regions[$regiondata->name]=$regiondata->href;
-        }
+        $endpoints=$this->getEndpoints();
+        $regions=$this->walkEndpoint(
+            $endpoints->regions->href,
+            'regions',
+            'items',
+            'name',
+            array(),
+            'application/vnd.ccp.eve.RegionCollection-v1+json; charset=utf-8'
+        );
+        return $regions;
     }
 
 
     private function getItems()
     {
-        if (count($this->items)) {
-            return;
-        }
-        if ($this->expiry<time()+30) {
-            $this->getAccessToken();
-        }
-        $url=$this->endpoints->itemTypes->href;
-        
-        $config['headers']=array(
-            'Authorization' => 'Bearer '.$this->access_token,
-            'Accept' => 'application/vnd.ccp.eve.ItemTypeCollection-v1+json; charset=utf-8'
+        $endpoints=$this->getEndpoints();
+        $items=$this->walkEndpoint(
+            $endpoints->itemTypes->href,
+            'items',
+            'items',
+            'name',
+            array(),
+            'application/vnd.ccp.eve.ItemTypeCollection-v1+json; charset=utf-8'
         );
-        while (1) {
-            $response = $this->guzzle_client->get($url, $config);
-            $json=json_decode($response->getBody());
-            foreach ($json->items as $item) {
-                $this->items[$item->name]=$item->href;
-            }
-            if (isset($json->next)) {
-                $url=$json->next->href;
-            } else {
-                break;
-            }
-        }
+        return $items;
+        
     }
 
     private function getRegionOrderUrls($region)
     {
 
-        // Caching to be added here.
-
-        $this->getRegions();
+        $regions=$this->getRegions();
         
-        if ($this->expiry<time()) {
-            $this->getAccessToken();
-        }
-        $config['headers']=array(
-            'Authorization' => 'Bearer '.$this->access_token,
-            'Accept' => 'application/vnd.ccp.eve.Region-v1+json; charset=utf-8'
+        $json=$this->getEndpoint(
+            $regions[$region]->href,
+            array(),
+            'application/vnd.ccp.eve.Region-v1+json; charset=utf-8'
         );
-        $response = $this->guzzle_client->get($this->regions[$region], $config);
-        $json=json_decode($response->getBody());
         return array($json->marketSellOrders->href,$json->marketBuyOrders->href);
 
     }
@@ -149,48 +190,28 @@ class Client
 
     public function getPriceData($region, $type)
     {
-        $this->getItems();
-        if ($this->expiry<time()) {
-            $this->getAccessToken();
-        }
-
         list($sellurl, $buyurl)=$this->getRegionOrderUrls($region);
-        $buy=$this->processPrice($type, $buyurl);
-        $sell=$this->processPrice($type, $sellurl);
+        $buy=$this->processPrice($type, $buyurl, "buy");
+        $sell=$this->processPrice($type, $sellurl, "sell");
     
-        return json_encode(array("buy"=>$buy,"sell"=>$sell));
+        return array("buy"=>$buy,"sell"=>$sell);
 
 
 
     }
 
-    private function processPrice($type, $url)
+    private function processPrice($type, $url, $orderType)
     {
-        if ($this->expiry<time()) {
-            $this->getAccessToken();
-        }
-        $config['headers']=array(
-            'Authorization' => 'Bearer '.$this->access_token,
-            'Accept' => 'application/vnd.ccp.eve.MarketOrderCollection-v1+json; charset=utf-8'
+        $items=$this->getItems();
+        $config['query']=array('type' =>  $items[$type]->href);
+        $details=$this->walkEndpoint(
+            $url,
+            "orders/".$type."/".$orderType,
+            "items",
+            "",
+            $config['query'],
+            'application/vnd.ccp.eve.MarketOrderCollection-v1+json; charset=utf-8'
         );
-        $config['query']=array('type' =>  $this->items[$type]);
-        $response = $this->guzzle_client->get($url, $config);
-        $json=json_decode($response->getBody());
-        $details=array();
-        foreach ($json->items as $item) {
-            $details[]=array(
-                "volume"=>$item->volume,
-                "minVolume"=>$item->minVolume,
-                "range"=>$item->range,
-                "location"=>$item->location->href,
-                "duration"=>$item->duration,
-                "buy"=>$item->buy,
-                "price"=>$item->price,
-                "issued"=>$item->issued
-            );
-        }
         return $details;
-        
-
     }
 }

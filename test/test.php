@@ -9,6 +9,7 @@ use CrestLibrary\Client;
 $client = new Client($url, $secret, $clientid, $refresh_token);
 
 
-$pricedata=$client->getPriceData('The Forge', 'Tritanium');
+
+$pricedata=$client->getPriceData("Sinq Laison", "Pyerite");
 
 var_dump($pricedata);
