@@ -43,8 +43,9 @@ class Client
 
     public function walkEndpoint($resource, $key, $collection, $index = '', $parameters = array(), $accept = '', $maxpages = INF, $ttl = 300)
     {
-
-        $item=$this->cache->getItem('walked/'.$key);
+        $key=trim("walked/".str_replace($this->urlbase, '', $resource).sha1(json_encode($parameters).$collection.$index.$accept), '/');
+#        echo $key."\n";
+        $item=$this->cache->getItem($key);
         $data=$item->get();
         if ($item->isMiss()) {
             $data=array();
@@ -74,7 +75,6 @@ class Client
 
     public function getEndpoint($resource, $parameters = array(), $accept = '')
     {
-        #var_dump($resource);
         $key=trim(str_replace($this->urlbase, '', $resource), '/');
         $item=$this->cache->getItem($key.'/'.sha1(json_encode($parameters).$accept));
         $data=$item->get();
@@ -193,7 +193,6 @@ class Client
         list($sellurl, $buyurl)=$this->getRegionOrderUrls($region);
         $buy=$this->processPrice($type, $buyurl, "buy");
         $sell=$this->processPrice($type, $sellurl, "sell");
-    
         return array("buy"=>$buy,"sell"=>$sell);
 
 
