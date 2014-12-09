@@ -15,8 +15,6 @@ class Client
     private $guzzle_client;
 
 
-// Temporaty, until I work up the database caching.
-
     public function __construct($urlbase, $secret, $clientid, $refresh_token, $access_token = '', $expiry = 0, $pool = '')
     {
         $this->expiry=0;
@@ -44,7 +42,6 @@ class Client
     public function walkEndpoint($resource, $key, $collection, $index = '', $parameters = array(), $accept = '', $maxpages = INF, $ttl = 300)
     {
         $key=trim("walked/".str_replace($this->urlbase, '', $resource).sha1(json_encode($parameters).$collection.$index.$accept), '/');
-#        echo $key."\n";
         $item=$this->cache->getItem($key);
         $data=$item->get();
         if ($item->isMiss()) {
@@ -100,6 +97,9 @@ class Client
                     }
                 }
             }
+            if ($response->getHeader('X-Deprecated')) {
+                error_log("Resource: ".$resource." has been marked deprecated. ".$accept);
+            }
             $data=json_decode($response->getBody());
             $item->set($data, $ttl);
         }
@@ -136,6 +136,9 @@ class Client
                         $ttl=substr(trim($line), 8);
                     }
                 }
+            }
+            if ($response->getHeader('X-Deprecated')) {
+                error_log("The root endpoint has been marked deprecated.");
             }
             $item->set($data, $ttl);
         }
