@@ -29,13 +29,14 @@ class Client
         $this->refresh_token=$refresh_token;
         $this->expiry=$expiry;
         $this->guzzle_client=new \GuzzleHttp\Client([
-            'base_url' => $urlbase,
-            'defaults' => [
-                'headers' => [
-                    'User-Agent' => $this->useragent
-                ]
+            'base_uri' => $urlbase,
+        	'timeout' => 30.0,
+        	'cookies' => true,
+            'headers' => [
+                'User-Agent' => $this->useragent
             ]
         ]);
+       // $this->guzzle_client->setDefaultOption('verify', false);
     }
   
 
@@ -77,9 +78,11 @@ class Client
         $data=$item->get();
         if ($item->isMiss()) {
             $item->lock();
+            /*
+             * FIX ME! 
             if ($this->expiry<time()+5) {
-                $this->getAccessToken();
-            }
+                //$this->getAccessToken();
+            }*/
             $config['headers']=array(
                 'Authorization' => 'Bearer '.$this->access_token,
                 'Accept' => $accept
@@ -90,7 +93,7 @@ class Client
             $response = $this->guzzle_client->get($resource, $config);
             $ttl=200;
             if ($cachecontrol=$response->getHeader('Cache-Control')) {
-                $parts=explode(",", $cachecontrol);
+                $parts=explode(",", $cachecontrol[0]);
                 foreach ($parts as $line) {
                     if (substr(trim($line), 0, 7)=='max-age') {
                         $ttl=substr(trim($line), 8);
@@ -106,9 +109,13 @@ class Client
         return $data;
     }
 
-
+/**
+ * I would like to fix this aswell but i fail, horribly!
+ */
+    /*
     private function getAccessToken()
     {
+
         $endpoints=$this->getEndpoints();
         $config['headers']=array( 'Authorization' => 'Basic '.base64_encode($this->clientid.':'.$this->secret));
         $config['query']=array('grant_type' => 'refresh_token','refresh_token' => $this->refresh_token);
@@ -118,7 +125,7 @@ class Client
         $this->access_token=$json->access_token;
         $this->expiry=time()+$json->expires_in-20;
     }
-
+*/
     public function getEndpoints()
     {
         $item=$this->cache->getitem('Endpoints');
@@ -130,7 +137,7 @@ class Client
             $data=json_decode($response->getBody());
             $ttl=300;
             if ($cachecontrol=$response->getHeader('Cache-Control')) {
-                $parts=explode(",", $cachecontrol);
+                $parts=explode(",", $cachecontrol[0]);
                 foreach ($parts as $line) {
                     if (substr(trim($line), 0, 7)=='max-age') {
                         $ttl=substr(trim($line), 8);
@@ -142,6 +149,7 @@ class Client
             }
             $item->set($data, $ttl);
         }
+        
         return $data;
     }
 
